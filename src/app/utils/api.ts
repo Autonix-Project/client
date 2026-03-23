@@ -291,7 +291,7 @@ export type WebSocketMessage =
 
 export class MockWebSocket {
   private listeners: ((message: WebSocketMessage) => void)[] = [];
-  private interval: NodeJS.Timeout | null = null;
+  private interval: ReturnType<typeof setInterval> | null = null;
 
   connect() {
     console.log('WebSocket connected');
