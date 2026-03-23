@@ -47,9 +47,7 @@ export interface NotificationResponseDTO {
   isRead: boolean;
 }
 
-const API_BASE: string =
-  (import.meta as { env?: { VITE_API_BASE_URL?: string } }).env?.VITE_API_BASE_URL
-  ?? 'http://localhost:8081';
+const API_BASE = import.meta.env.VITE_LINE_API_URL ?? 'http://localhost:8083';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
