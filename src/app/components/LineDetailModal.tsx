@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, CheckCircle2, Circle, AlertCircle, Loader2 } from 'lucide-react';
+import { X, CheckCircle2, Circle, AlertCircle, Loader2, Package } from 'lucide-react';
 import {
   linesService,
   LineResponseDTO,
@@ -12,8 +12,27 @@ interface LineDetailModalProps {
   onClose: () => void;
 }
 
-// 백엔드 LineType 순서에 맞춘 스테이션 목록
 const PROCESS_STEPS = ['차체', '도장', '조립', '품질검사', '출고'] as const;
+
+// 조립 라인 전용 스테이션 정의
+const ASSEMBLY_STATIONS = [
+  {
+    name: '파워트레인 장착',
+    parts: ['엔진', '변속기', '드라이브샤프트'],
+  },
+  {
+    name: '섀시/하부 조립',
+    parts: ['타이어', '브레이크 세트', '서스펜션'],
+  },
+  {
+    name: '전장 시스템',
+    parts: ['배터리', 'ECU', '센서'],
+  },
+  {
+    name: '내부 조립',
+    parts: ['시트', '에어백', '내부 부품'],
+  },
+];
 
 const VEHICLE_STATUS_LABEL: Record<string, string> = {
   PENDING:    '대기',
@@ -35,6 +54,8 @@ export function LineDetailModal({ line, onClose }: LineDetailModalProps) {
   const [vehicles, setVehicles] = useState<VehicleResponseDTO[]>([]);
   const [loadingVehicles, setLoadingVehicles] = useState(true);
 
+  const isAssemblyLine = line.lineType === '조립';
+
   useEffect(() => {
     linesService
       .getVehiclesByLine(line.lineId)
@@ -43,9 +64,8 @@ export function LineDetailModal({ line, onClose }: LineDetailModalProps) {
       .finally(() => setLoadingVehicles(false));
   }, [line.lineId]);
 
-  // 스테이션별 상태 계산
+  // 공정 흐름 스테이션 상태 계산
   const currentProcessIndex = PROCESS_STEPS.indexOf(line.lineType as (typeof PROCESS_STEPS)[number]);
-
   const getStationState = (idx: number) => {
     if (line.lineStatus === 'FAULT' && idx === currentProcessIndex) return 'failed';
     if (idx < currentProcessIndex) return 'completed';
@@ -53,8 +73,20 @@ export function LineDetailModal({ line, onClose }: LineDetailModalProps) {
     return 'pending';
   };
 
+  // 메트릭
   const processingCount = vehicles.filter(v => v.status === 'PROCESSING').length;
-  const completedCount = vehicles.filter(v => v.status === 'COMPLETED' || v.status === 'QC_PASS').length;
+  const completedCount  = vehicles.filter(v => v.status === 'COMPLETED' || v.status === 'QC_PASS').length;
+  const utilizationRate = vehicles.length > 0
+    ? Math.round((processingCount / vehicles.length) * 100)
+    : (line.lineStatus === 'NORMAL' ? 0 : 0);
+
+  // 조립 라인: 스테이션별 차량 그룹핑
+  const vehiclesByStation = isAssemblyLine
+    ? ASSEMBLY_STATIONS.reduce<Record<string, VehicleResponseDTO[]>>((acc, s) => {
+        acc[s.name] = vehicles.filter(v => v.currentStation === s.name);
+        return acc;
+      }, {})
+    : {};
 
   return (
     <>
@@ -87,17 +119,14 @@ export function LineDetailModal({ line, onClose }: LineDetailModalProps) {
                   </span>
                 </div>
               </div>
-              <button
-                onClick={onClose}
-                className="p-2 rounded-lg hover:bg-secondary transition-colors"
-              >
+              <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
           </div>
 
           <div className="p-6">
-            {/* 공정 흐름 스테이션 맵 */}
+            {/* 공정 흐름 — 모든 라인 공통 */}
             <div className="mb-8">
               <h3 className="font-bold mb-6">공정 흐름</h3>
               <div className="flex items-center justify-between px-4">
@@ -106,52 +135,76 @@ export function LineDetailModal({ line, onClose }: LineDetailModalProps) {
                   return (
                     <div key={step} className="flex items-center">
                       <div className="flex flex-col items-center">
-                        {state === 'completed' && (
-                          <div className="w-12 h-12 rounded-full bg-[#39D353]/10 flex items-center justify-center">
-                            <CheckCircle2 className="w-6 h-6 text-[#39D353]" />
-                          </div>
-                        )}
-                        {state === 'in-progress' && (
-                          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                            <Circle className="w-6 h-6 text-primary fill-primary animate-pulse" />
-                          </div>
-                        )}
-                        {state === 'pending' && (
-                          <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center">
-                            <Circle className="w-6 h-6 text-muted-foreground" />
-                          </div>
-                        )}
-                        {state === 'failed' && (
-                          <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
-                            <AlertCircle className="w-6 h-6 text-destructive" />
-                          </div>
-                        )}
+                        {state === 'completed'   && <div className="w-12 h-12 rounded-full bg-[#39D353]/10 flex items-center justify-center"><CheckCircle2 className="w-6 h-6 text-[#39D353]" /></div>}
+                        {state === 'in-progress' && <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center"><Circle className="w-6 h-6 text-primary fill-primary animate-pulse" /></div>}
+                        {state === 'pending'     && <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center"><Circle className="w-6 h-6 text-muted-foreground" /></div>}
+                        {state === 'failed'      && <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center"><AlertCircle className="w-6 h-6 text-destructive" /></div>}
                         <p className="text-sm mt-2 font-medium">{step}</p>
-                        {step === line.lineType && (
-                          <p className="text-xs text-muted-foreground mt-0.5">현재</p>
-                        )}
+                        {step === line.lineType && <p className="text-xs text-muted-foreground mt-0.5">현재</p>}
                       </div>
-
-                      {idx < PROCESS_STEPS.length - 1 && (
-                        <div className="w-12 h-px bg-border mx-2" />
-                      )}
+                      {idx < PROCESS_STEPS.length - 1 && <div className="w-12 h-px bg-border mx-2" />}
                     </div>
                   );
                 })}
               </div>
             </div>
 
+            {/* 조립 라인 전용: 스테이션 맵 */}
+            {isAssemblyLine && (
+              <div className="mb-8">
+                <h3 className="font-bold mb-4">조립 스테이션 맵</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {ASSEMBLY_STATIONS.map(station => {
+                    const stationVehicles = vehiclesByStation[station.name] ?? [];
+                    return (
+                      <div key={station.name} className="bg-secondary/40 border border-border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-semibold text-sm">{station.name}</h4>
+                          {stationVehicles.length > 0 && (
+                            <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+                              {stationVehicles.length}대 작업 중
+                            </span>
+                          )}
+                        </div>
+                        {/* 부품 목록 */}
+                        <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+                          <Package className="w-3 h-3 text-muted-foreground shrink-0" />
+                          {station.parts.map(part => (
+                            <span key={part} className="text-xs px-2 py-0.5 bg-secondary rounded text-muted-foreground">
+                              {part}
+                            </span>
+                          ))}
+                        </div>
+                        {/* 해당 스테이션 차량 */}
+                        {loadingVehicles ? (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Loader2 className="w-3 h-3 animate-spin" /> 로딩 중...
+                          </div>
+                        ) : stationVehicles.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">대기 중인 차량 없음</p>
+                        ) : (
+                          <ul className="space-y-1">
+                            {stationVehicles.map(v => (
+                              <li key={v.vehicleId} className="text-xs flex items-center justify-between">
+                                <span className="font-medium">{v.vehicleNumber}</span>
+                                <span className="text-muted-foreground">{v.carModel} · {calcElapsed(v.processStartedAt)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* 할당 차량 테이블 */}
             <div className="mb-8">
               <h3 className="font-bold mb-4">
                 할당 차량
-                {!loadingVehicles && (
-                  <span className="ml-2 text-sm font-normal text-muted-foreground">
-                    ({vehicles.length}대)
-                  </span>
-                )}
+                {!loadingVehicles && <span className="ml-2 text-sm font-normal text-muted-foreground">({vehicles.length}대)</span>}
               </h3>
-
               {loadingVehicles ? (
                 <div className="flex items-center justify-center py-8 text-muted-foreground gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -169,7 +222,7 @@ export function LineDetailModal({ line, onClose }: LineDetailModalProps) {
                         <th className="px-4 py-3 text-left text-sm font-medium">차량번호</th>
                         <th className="px-4 py-3 text-left text-sm font-medium">차종</th>
                         <th className="px-4 py-3 text-left text-sm font-medium">컬러</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium">현재 공정</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium">현재 공정{isAssemblyLine ? ' / 스테이션' : ''}</th>
                         <th className="px-4 py-3 text-left text-sm font-medium">상태</th>
                         <th className="px-4 py-3 text-right text-sm font-medium">경과시간</th>
                       </tr>
@@ -182,8 +235,7 @@ export function LineDetailModal({ line, onClose }: LineDetailModalProps) {
                           <td className="px-4 py-3 text-muted-foreground">{v.carColor}</td>
                           <td className="px-4 py-3">
                             <span className="px-2 py-1 bg-primary/10 text-primary text-xs rounded">
-                              {v.currentProcess}
-                              {v.currentStation ? ` · ${v.currentStation}` : ''}
+                              {v.currentProcess}{v.currentStation ? ` / ${v.currentStation}` : ''}
                             </span>
                           </td>
                           <td className="px-4 py-3">
@@ -202,19 +254,25 @@ export function LineDetailModal({ line, onClose }: LineDetailModalProps) {
               )}
             </div>
 
-            {/* 공정 요약 메트릭 */}
-            <div className="grid grid-cols-3 gap-4">
+            {/* 메트릭 4개 */}
+            <div className="grid grid-cols-4 gap-4">
               <div className="bg-secondary/50 rounded-lg p-4">
-                <p className="text-sm text-muted-foreground mb-1">전체 차량</p>
+                <p className="text-xs text-muted-foreground mb-1">현재 할당 차량</p>
                 <p className="text-2xl font-bold">{vehicles.length}대</p>
               </div>
               <div className="bg-secondary/50 rounded-lg p-4">
-                <p className="text-sm text-muted-foreground mb-1">진행 중</p>
-                <p className="text-2xl font-bold text-primary">{processingCount}대</p>
+                <p className="text-xs text-muted-foreground mb-1">오늘 완료 차량</p>
+                <p className="text-2xl font-bold text-[#39D353]">{completedCount}대</p>
               </div>
               <div className="bg-secondary/50 rounded-lg p-4">
-                <p className="text-sm text-muted-foreground mb-1">완료</p>
-                <p className="text-2xl font-bold text-[#39D353]">{completedCount}대</p>
+                <p className="text-xs text-muted-foreground mb-1">평균 사이클 타임</p>
+                <p className="text-2xl font-bold text-muted-foreground">-</p>
+              </div>
+              <div className="bg-secondary/50 rounded-lg p-4">
+                <p className="text-xs text-muted-foreground mb-1">가동률</p>
+                <p className={`text-2xl font-bold ${line.lineStatus === 'FAULT' ? 'text-destructive' : 'text-primary'}`}>
+                  {line.lineStatus === 'FAULT' ? '0' : utilizationRate}%
+                </p>
               </div>
             </div>
           </div>
