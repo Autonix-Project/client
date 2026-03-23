@@ -1,6 +1,6 @@
 // Mock API and WebSocket simulation for Smart Factory Dashboard
 
-export type CarStatus = 'BODY_ASSEMBLY' | 'ENGINE_INSTALL' | 'PAINTING' | 'QC' | 'READY_FOR_SHIPPING';
+export type CarStatus = 'BODY' | 'PAINTING' | 'ASSEMBLY' | 'QC' | 'SHIPPING';
 export type LineStatus = 'NORMAL' | 'FAILURE' | 'MAINTENANCE';
 export type OrderPriority = 'HIGH' | 'NORMAL' | 'LOW';
 export type OrderStatus = 'PENDING' | 'IN_PRODUCTION' | 'COMPLETED';
@@ -31,7 +31,7 @@ export interface ProductionOrder {
   id: string;
   modelName: string;
   quantity: number;
-  priority: OrderPriority;
+  priority?: OrderPriority;
   status: OrderStatus;
   createdAt: Date;
   color?: string;
@@ -83,16 +83,16 @@ export interface DashboardStats {
 
 // Mock data storage
 let mockCars: Car[] = [
-  { id: 'CAR-001', modelName: 'Model X', status: 'BODY_ASSEMBLY', startTime: new Date(Date.now() - 3600000), hasIssue: false },
-  { id: 'CAR-002', modelName: 'Model S', status: 'BODY_ASSEMBLY', startTime: new Date(Date.now() - 7200000), hasIssue: false },
-  { id: 'CAR-003', modelName: 'Model Y', status: 'ENGINE_INSTALL', startTime: new Date(Date.now() - 5400000), hasIssue: false },
-  { id: 'CAR-004', modelName: 'Model 3', status: 'ENGINE_INSTALL', startTime: new Date(Date.now() - 1800000), hasIssue: false },
-  { id: 'CAR-005', modelName: 'Model X', status: 'PAINTING', startTime: new Date(Date.now() - 9000000), hasIssue: false },
-  { id: 'CAR-006', modelName: 'Model S', status: 'PAINTING', startTime: new Date(Date.now() - 10800000), hasIssue: true },
-  { id: 'CAR-007', modelName: 'Model Y', status: 'QC', startTime: new Date(Date.now() - 14400000), hasIssue: false },
-  { id: 'CAR-008', modelName: 'Model 3', status: 'QC', startTime: new Date(Date.now() - 12600000), hasIssue: false },
-  { id: 'CAR-009', modelName: 'Model X', status: 'READY_FOR_SHIPPING', startTime: new Date(Date.now() - 18000000), hasIssue: false },
-  { id: 'CAR-010', modelName: 'Model S', status: 'READY_FOR_SHIPPING', startTime: new Date(Date.now() - 16200000), hasIssue: false },
+  { id: 'CAR-001', modelName: '소나타 N라인',     status: 'BODY',     startTime: new Date(Date.now() - 3600000),  hasIssue: false },
+  { id: 'CAR-002', modelName: '투싼 하이브리드', status: 'BODY',     startTime: new Date(Date.now() - 7200000),  hasIssue: false },
+  { id: 'CAR-003', modelName: '아이오닉6',        status: 'PAINTING', startTime: new Date(Date.now() - 5400000),  hasIssue: false },
+  { id: 'CAR-004', modelName: '팰리세이드',       status: 'PAINTING', startTime: new Date(Date.now() - 1800000),  hasIssue: false },
+  { id: 'CAR-005', modelName: '코나 일렉트릭',   status: 'ASSEMBLY', startTime: new Date(Date.now() - 9000000),  hasIssue: false },
+  { id: 'CAR-006', modelName: '소나타 N라인',     status: 'ASSEMBLY', startTime: new Date(Date.now() - 10800000), hasIssue: true  },
+  { id: 'CAR-007', modelName: '투싼 하이브리드', status: 'QC',       startTime: new Date(Date.now() - 14400000), hasIssue: false },
+  { id: 'CAR-008', modelName: '아이오닉6',        status: 'QC',       startTime: new Date(Date.now() - 12600000), hasIssue: false },
+  { id: 'CAR-009', modelName: '팰리세이드',       status: 'SHIPPING', startTime: new Date(Date.now() - 18000000), hasIssue: false },
+  { id: 'CAR-010', modelName: '코나 일렉트릭',   status: 'SHIPPING', startTime: new Date(Date.now() - 16200000), hasIssue: false },
 ];
 
 let mockLines: ProductionLine[] = [
@@ -204,8 +204,8 @@ export const carsAPI = {
   
   getStats: async (): Promise<DashboardStats> => {
     await new Promise(resolve => setTimeout(resolve, 200));
-    const inProduction = mockCars.filter(c => c.status !== 'READY_FOR_SHIPPING').length;
-    const completed = mockCars.filter(c => c.status === 'READY_FOR_SHIPPING').length;
+    const inProduction = mockCars.filter(c => c.status !== 'SHIPPING').length;
+    const completed = mockCars.filter(c => c.status === 'SHIPPING').length;
     const inventoryAlerts = mockInventory.filter(i => i.status !== 'OK').length;
     
     return {
@@ -307,7 +307,7 @@ export class MockWebSocket {
       if (random < 0.3 && mockCars.length > 0) {
         // Update car status
         const car = mockCars[Math.floor(Math.random() * mockCars.length)];
-        const statuses: CarStatus[] = ['BODY_ASSEMBLY', 'ENGINE_INSTALL', 'PAINTING', 'QC', 'READY_FOR_SHIPPING'];
+        const statuses: CarStatus[] = ['BODY', 'PAINTING', 'ASSEMBLY', 'QC', 'SHIPPING'];
         const currentIndex = statuses.indexOf(car.status);
         if (currentIndex < statuses.length - 1) {
           car.status = statuses[currentIndex + 1];

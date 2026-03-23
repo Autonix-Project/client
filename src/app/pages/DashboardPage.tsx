@@ -16,11 +16,11 @@ function formatTimeAgo(date: Date): string {
 }
 
 const STATUS_COLUMNS: { status: CarStatus; label: string; color: string }[] = [
-  { status: 'BODY_ASSEMBLY', label: '차체 조립', color: 'bg-blue-500' },
-  { status: 'ENGINE_INSTALL', label: '엔진 설치', color: 'bg-purple-500' },
-  { status: 'PAINTING', label: '도장', color: 'bg-yellow-500' },
-  { status: 'QC', label: '품질검사', color: 'bg-green-500' },
-  { status: 'READY_FOR_SHIPPING', label: '출고 대기', color: 'bg-primary' },
+  { status: 'BODY',     label: '차체',    color: 'bg-blue-500' },
+  { status: 'PAINTING', label: '도장',    color: 'bg-purple-500' },
+  { status: 'ASSEMBLY', label: '조립',    color: 'bg-yellow-500' },
+  { status: 'QC',       label: '품질검사', color: 'bg-green-500' },
+  { status: 'SHIPPING', label: '출고',    color: 'bg-primary' },
 ];
 
 export function DashboardPage() {
