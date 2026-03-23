@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ClipboardList, TrendingUp, Clock, CheckCircle } from 'lucide-react';
-import { ordersAPI, ProductionOrder, OrderPriority, CAR_MODELS } from '../utils/api';
+import { ordersAPI, ProductionOrder, OrderPriority, CAR_MODELS, CAR_COLORS } from '../utils/api';
 import { toast } from 'sonner';
 
 // Simple date formatting
@@ -34,6 +34,8 @@ export function OrdersPage() {
   const [modelName, setModelName] = useState(CAR_MODELS[0]);
   const [quantity, setQuantity] = useState('1');
   const [priority, setPriority] = useState<OrderPriority>('NORMAL');
+  const [color, setColor] = useState(CAR_COLORS[0]);
+  const [destination, setDestination] = useState('');
 
   useEffect(() => {
     loadOrders();
@@ -50,12 +52,17 @@ export function OrdersPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     const qty = parseInt(quantity);
     if (isNaN(qty) || qty < 1 || qty > 50) {
       toast.error('수량은 1~50 사이로 입력해주세요');
+      return;
+    }
+
+    if (!destination.trim()) {
+      toast.error('목적지를 입력해주세요');
       return;
     }
 
@@ -65,14 +72,17 @@ export function OrdersPage() {
         modelName,
         quantity: qty,
         priority,
+        color,
+        destination: destination.trim(),
       });
-      
+
       toast.success('주문이 등록되었습니다. 시뮬레이션을 시작합니다.');
       await loadOrders();
-      
+
       // Reset form
       setQuantity('1');
       setPriority('NORMAL');
+      setDestination('');
     } catch (error) {
       toast.error('주문 등록 실패');
     } finally {
@@ -137,6 +147,33 @@ export function OrdersPage() {
             />
           </div>
 
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="color" className="block text-sm mb-2">차량 색상</label>
+              <select
+                id="color"
+                value={color}
+                onChange={e => setColor(e.target.value)}
+                className="w-full px-4 py-3 bg-input-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                {CAR_COLORS.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="destination" className="block text-sm mb-2">목적지</label>
+              <input
+                id="destination"
+                type="text"
+                placeholder="예: 서울 딜러"
+                value={destination}
+                onChange={e => setDestination(e.target.value)}
+                className="w-full px-4 py-3 bg-input-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm mb-3">우선순위</label>
             <div className="flex gap-4">
@@ -185,7 +222,9 @@ export function OrdersPage() {
               <tr>
                 <th className="px-6 py-4 text-left">주문번호</th>
                 <th className="px-6 py-4 text-left">차종</th>
+                <th className="px-6 py-4 text-left">색상</th>
                 <th className="px-6 py-4 text-center">수량</th>
+                <th className="px-6 py-4 text-left">목적지</th>
                 <th className="px-6 py-4 text-center">우선순위</th>
                 <th className="px-6 py-4 text-left">등록시각</th>
                 <th className="px-6 py-4 text-center">상태</th>
@@ -194,7 +233,7 @@ export function OrdersPage() {
             <tbody>
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-6 py-12 text-center text-muted-foreground">
                     등록된 주문이 없습니다
                   </td>
                 </tr>
@@ -211,8 +250,14 @@ export function OrdersPage() {
                       <td className="px-6 py-4">
                         <span className="font-medium">{order.modelName}</span>
                       </td>
+                      <td className="px-6 py-4 text-muted-foreground">
+                        {order.color ?? '-'}
+                      </td>
                       <td className="px-6 py-4 text-center">
                         <span className="font-bold text-lg">{order.quantity}</span>
+                      </td>
+                      <td className="px-6 py-4 text-muted-foreground">
+                        {order.destination ?? '-'}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex justify-center">
