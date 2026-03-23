@@ -34,6 +34,8 @@ export interface ProductionOrder {
   priority: OrderPriority;
   status: OrderStatus;
   createdAt: Date;
+  color?: string;
+  destination?: string;
 }
 
 export const CAR_MODELS = [
@@ -43,6 +45,8 @@ export const CAR_MODELS = [
   '팰리세이드',
   '코나 일렉트릭',
 ];
+
+export const CAR_COLORS = ['흰색', '검정', '회색', '실버', '파랑', '빨강', '갈색'];
 
 export interface ProductionLine {
   id: string;
