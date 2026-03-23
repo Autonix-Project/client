@@ -31,7 +31,7 @@ const STATE_MAP: Record<string, ShipStatus> = {
   '배송완료': 'DELIVERED',
 };
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8081';
+const API_BASE = import.meta.env.VITE_SHIPPING_API_URL ?? 'http://localhost:8085';
 
 async function request<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
