@@ -1,76 +1,64 @@
 import { useState, useEffect } from 'react';
 import { Truck, Package, CheckCircle2, Clock, MapPin } from 'lucide-react';
-import { shipmentsAPI, Shipment } from '../utils/api';
+import { shippingsService, ShipmentView, ShipStatus } from '../utils/shippingsApi';
 import { toast } from 'sonner';
 import { ShipmentDetailModal } from '../components/ShipmentDetailModal';
 
-// Simple date formatting
-function formatDateTime(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${year}-${month}-${day} ${hours}:${minutes}`;
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  const year  = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day   = String(d.getDate()).padStart(2, '0');
+  const hours = String(d.getHours()).padStart(2, '0');
+  const mins  = String(d.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hours}:${mins}`;
 }
 
-const STATUS_CONFIG = {
-  PENDING: { 
-    label: '출고 대기', 
-    color: 'text-[#FFA500]', 
-    bgColor: 'bg-[#FFA500]/10',
-    icon: Clock,
-  },
-  IN_TRANSIT: { 
-    label: '배송 중', 
-    color: 'text-primary', 
-    bgColor: 'bg-primary/10',
-    icon: Truck,
-  },
-  DELIVERED: { 
-    label: '배송 완료', 
-    color: 'text-[#39D353]', 
-    bgColor: 'bg-[#39D353]/10',
-    icon: CheckCircle2,
-  },
+function calcProgress(createdAt: string, arrivalAt: string | null): number {
+  const start = new Date(createdAt).getTime();
+  const end   = arrivalAt ? new Date(arrivalAt).getTime() : start + 4 * 3600000;
+  const pct   = ((Date.now() - start) / (end - start)) * 100;
+  return Math.min(Math.max(Math.round(pct), 0), 95);
+}
+
+const STATUS_CONFIG: Record<ShipStatus, { label: string; color: string; bgColor: string; icon: any }> = {
+  PENDING:    { label: '출고 대기', color: 'text-[#FFA500]',   bgColor: 'bg-[#FFA500]/10',   icon: Clock },
+  IN_TRANSIT: { label: '배송 중',   color: 'text-primary',     bgColor: 'bg-primary/10',     icon: Truck },
+  DELIVERED:  { label: '배송 완료', color: 'text-[#39D353]',   bgColor: 'bg-[#39D353]/10',   icon: CheckCircle2 },
 };
 
 export function ShipmentsPage() {
-  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [shipments, setShipments] = useState<ShipmentView[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'IN_TRANSIT' | 'DELIVERED'>('ALL');
-  const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
+  const [filter, setFilter] = useState<'ALL' | ShipStatus>('ALL');
+  const [selectedShipment, setSelectedShipment] = useState<ShipmentView | null>(null);
 
-  useEffect(() => {
-    loadShipments();
-  }, []);
+  useEffect(() => { loadShipments(); }, []);
 
   const loadShipments = async () => {
     try {
-      const data = await shipmentsAPI.getAll();
+      const data = await shippingsService.getAll();
       setShipments(data);
-    } catch (error) {
-      toast.error('배송 데이터 로딩 실패');
+    } catch {
+      toast.error('배송 데이터 로딩 실패', { description: '서버 연결을 확인해주세요.' });
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredShipments = filter === 'ALL' 
-    ? shipments 
-    : shipments.filter(s => s.status === filter);
+  const filteredShipments = filter === 'ALL' ? shipments : shipments.filter(s => s.status === filter);
 
   const stats = {
-    pending: shipments.filter(s => s.status === 'PENDING').length,
-    inTransit: shipments.filter(s => s.status === 'IN_TRANSIT').length,
-    delivered: shipments.filter(s => s.status === 'DELIVERED').length,
+    pending:    shipments.filter(s => s.status === 'PENDING').length,
+    inTransit:  shipments.filter(s => s.status === 'IN_TRANSIT').length,
+    delivered:  shipments.filter(s => s.status === 'DELIVERED').length,
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-muted-foreground">데이터 로딩 중...</p>
         </div>
       </div>
@@ -84,7 +72,7 @@ export function ShipmentsPage() {
         <p className="text-muted-foreground">차량 출고 및 배송 추적</p>
       </div>
 
-      {/* Stats Cards */}
+      {/* 통계 카드 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-card border border-border rounded-lg p-6">
           <div className="flex items-center gap-3 mb-2">
@@ -93,7 +81,6 @@ export function ShipmentsPage() {
           </div>
           <p className="text-3xl font-bold">{stats.pending}</p>
         </div>
-        
         <div className="bg-card border border-border rounded-lg p-6">
           <div className="flex items-center gap-3 mb-2">
             <Truck className="w-5 h-5 text-primary" />
@@ -101,7 +88,6 @@ export function ShipmentsPage() {
           </div>
           <p className="text-3xl font-bold">{stats.inTransit}</p>
         </div>
-        
         <div className="bg-card border border-border rounded-lg p-6">
           <div className="flex items-center gap-3 mb-2">
             <CheckCircle2 className="w-5 h-5 text-[#39D353]" />
@@ -111,51 +97,24 @@ export function ShipmentsPage() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* 필터 */}
       <div className="flex gap-2 mb-6">
-        <button
-          onClick={() => setFilter('ALL')}
-          className={`px-4 py-2 rounded-lg transition-colors ${
-            filter === 'ALL'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-secondary text-foreground hover:bg-secondary/80'
-          }`}
-        >
-          전체
-        </button>
-        <button
-          onClick={() => setFilter('PENDING')}
-          className={`px-4 py-2 rounded-lg transition-colors ${
-            filter === 'PENDING'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-secondary text-foreground hover:bg-secondary/80'
-          }`}
-        >
-          출고 대기
-        </button>
-        <button
-          onClick={() => setFilter('IN_TRANSIT')}
-          className={`px-4 py-2 rounded-lg transition-colors ${
-            filter === 'IN_TRANSIT'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-secondary text-foreground hover:bg-secondary/80'
-          }`}
-        >
-          배송 중
-        </button>
-        <button
-          onClick={() => setFilter('DELIVERED')}
-          className={`px-4 py-2 rounded-lg transition-colors ${
-            filter === 'DELIVERED'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-secondary text-foreground hover:bg-secondary/80'
-          }`}
-        >
-          배송 완료
-        </button>
+        {(['ALL', 'PENDING', 'IN_TRANSIT', 'DELIVERED'] as const).map(f => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`px-4 py-2 rounded-lg transition-colors ${
+              filter === f
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-secondary text-foreground hover:bg-secondary/80'
+            }`}
+          >
+            {f === 'ALL' ? '전체' : STATUS_CONFIG[f].label}
+          </button>
+        ))}
       </div>
 
-      {/* Shipments List */}
+      {/* 배송 목록 */}
       <div className="bg-card border border-border rounded-lg divide-y divide-border">
         {filteredShipments.length === 0 ? (
           <div className="p-12 text-center">
@@ -166,7 +125,8 @@ export function ShipmentsPage() {
           filteredShipments.map(shipment => {
             const config = STATUS_CONFIG[shipment.status];
             const Icon = config.icon;
-            
+            const progress = calcProgress(shipment.createdAt, shipment.arrivalAt);
+
             return (
               <div key={shipment.id} className="p-6 hover:bg-secondary/30 transition-colors">
                 <div className="flex items-center justify-between mb-4">
@@ -175,13 +135,12 @@ export function ShipmentsPage() {
                       <Truck className="w-6 h-6 text-primary" />
                     </div>
                     <div>
-                      <h3 className="font-bold">{shipment.id}</h3>
+                      <h3 className="font-bold">{shipment.shippingNumber}</h3>
                       <p className="text-sm text-muted-foreground">
                         차량 ID: {shipment.carId} • {shipment.modelName}
                       </p>
                     </div>
                   </div>
-                  
                   <div className={`flex items-center gap-2 px-4 py-2 rounded-full ${config.bgColor}`}>
                     <Icon className={`w-4 h-4 ${config.color}`} />
                     <span className={`font-medium ${config.color}`}>{config.label}</span>
@@ -191,27 +150,27 @@ export function ShipmentsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 ml-[72px]">
                   <div className="flex items-center gap-2 text-sm">
                     <MapPin className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">목적지:</span>
-                    <span className="font-medium">{shipment.destination}</span>
+                    <span className="text-muted-foreground">출발:</span>
+                    <span className="font-medium">{formatDateTime(shipment.createdAt)}</span>
                   </div>
-                  
+
                   <div className="flex items-center gap-2 text-sm">
                     <Clock className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">생성:</span>
+                    <span className="text-muted-foreground">도착 예정:</span>
                     <span className="font-medium">
-                      {formatDateTime(new Date(shipment.createdAt))}
+                      {shipment.arrivalAt ? formatDateTime(shipment.arrivalAt) : '-'}
                     </span>
                   </div>
 
                   {shipment.status === 'IN_TRANSIT' && (
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-primary animate-pulse"
-                          style={{ width: '60%' }}
-                        ></div>
+                        <div
+                          className="h-full bg-primary transition-all duration-500"
+                          style={{ width: `${progress}%` }}
+                        />
                       </div>
-                      <span className="text-xs text-muted-foreground">60%</span>
+                      <span className="text-xs text-muted-foreground">{progress}%</span>
                     </div>
                   )}
                 </div>
@@ -219,7 +178,7 @@ export function ShipmentsPage() {
                 <div className="mt-4">
                   <button
                     onClick={() => setSelectedShipment(shipment)}
-                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg"
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
                   >
                     상세 정보
                   </button>
@@ -230,7 +189,6 @@ export function ShipmentsPage() {
         )}
       </div>
 
-      {/* Shipment Detail Modal */}
       {selectedShipment && (
         <ShipmentDetailModal
           shipment={selectedShipment}
