@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Package, AlertTriangle, TrendingDown, BarChart3 } from 'lucide-react';
-import { inventoryAPI, InventoryItem } from '../utils/api';
+import { inventoryService, PartsResponseDTO } from '../utils/inventoryApi';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { InventoryDetailModal } from '../components/InventoryDetailModal';
@@ -12,10 +12,9 @@ const STATUS_CONFIG = {
 };
 
 export function InventoryPage() {
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [inventory, setInventory] = useState<PartsResponseDTO[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<PartsResponseDTO | null>(null);
 
   useEffect(() => {
     loadInventory();
@@ -23,7 +22,7 @@ export function InventoryPage() {
 
   const loadInventory = async () => {
     try {
-      const data = await inventoryAPI.getAll();
+      const data = await inventoryService.getAll();
       setInventory(data);
     } catch (error) {
       toast.error('재고 데이터 로딩 실패');
@@ -32,26 +31,11 @@ export function InventoryPage() {
     }
   };
 
-  const handleSimulateShortage = async (itemId: string) => {
-    setActionLoading(itemId);
-    try {
-      await inventoryAPI.simulateShortage(itemId);
-      await loadInventory();
-      toast.warning('재고 부족이 시뮬레이션되었습니다', {
-        description: '재고를 보충해야 합니다',
-      });
-    } catch (error) {
-      toast.error('시뮬레이션 실패');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
   const criticalItems = inventory.filter(i => i.status === 'CRITICAL');
   const lowItems = inventory.filter(i => i.status === 'LOW');
 
   const chartData = inventory.map(item => ({
-    name: item.name,
+    name: item.partName,
     현재고: item.currentStock,
     최소기준: item.minStock,
     status: item.status,
@@ -115,9 +99,9 @@ export function InventoryPage() {
             <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" />
             <XAxis dataKey="name" stroke="#999999" />
             <YAxis stroke="#999999" />
-            <Tooltip 
-              contentStyle={{ 
-                backgroundColor: '#1A1A1A', 
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#1A1A1A',
                 border: '1px solid #2A2A2A',
                 borderRadius: '8px',
                 color: '#E8E8E8'
@@ -125,13 +109,13 @@ export function InventoryPage() {
             />
             <Bar dataKey="현재고" radius={[4, 4, 0, 0]}>
               {chartData.map((entry, index) => (
-                <Cell 
-                  key={`cell-${index}`} 
+                <Cell
+                  key={`cell-${index}`}
                   fill={
                     entry.status === 'CRITICAL' ? '#FF2D2D' :
                     entry.status === 'LOW' ? '#FFA500' :
                     '#39D353'
-                  } 
+                  }
                 />
               ))}
             </Bar>
@@ -151,17 +135,16 @@ export function InventoryPage() {
                 <th className="px-6 py-4 text-center">최소기준</th>
                 <th className="px-6 py-4 text-center">재고율</th>
                 <th className="px-6 py-4 text-center">상태</th>
-                <th className="px-6 py-4 text-center">작업</th>
               </tr>
             </thead>
             <tbody>
               {inventory.map(item => {
                 const config = STATUS_CONFIG[item.status];
-                const percentage = Math.round((item.currentStock / item.minStock) * 100);
-                
+                const percentage = Math.round(item.stockRate);
+
                 return (
-                  <tr 
-                    key={item.id} 
+                  <tr
+                    key={item.id}
                     className="border-b border-border hover:bg-secondary/30 transition-colors cursor-pointer"
                     onClick={() => setSelectedItem(item)}
                   >
@@ -171,21 +154,21 @@ export function InventoryPage() {
                           <Package className="w-5 h-5 text-primary" />
                         </div>
                         <div>
-                          <p className="font-medium">{item.name}</p>
-                          <p className="text-sm text-muted-foreground">{item.id}</p>
+                          <p className="font-medium">{item.partName}</p>
+                          <p className="text-sm text-muted-foreground">{item.partCode}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <p className="font-bold">{item.currentStock}</p>
+                      <p className="font-bold">{item.currentStock} <span className="text-sm text-muted-foreground">{item.unit}</span></p>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <p className="text-muted-foreground">{item.minStock}</p>
+                      <p className="text-muted-foreground">{item.minStock} <span className="text-sm">{item.unit}</span></p>
                     </td>
                     <td className="px-6 py-4 text-center">
                       <div className="flex items-center gap-2 justify-center">
                         <div className="w-24 h-2 bg-secondary rounded-full overflow-hidden">
-                          <div 
+                          <div
                             className={`h-full ${
                               percentage < 50 ? 'bg-destructive' :
                               percentage < 100 ? 'bg-[#FFA500]' :
@@ -202,20 +185,6 @@ export function InventoryPage() {
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${config.bgColor} ${config.color}`}>
                           {config.label}
                         </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex justify-center">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSimulateShortage(item.id);
-                          }}
-                          disabled={actionLoading === item.id}
-                          className="px-3 py-1.5 bg-destructive/10 text-destructive rounded-lg hover:bg-destructive/20 transition-colors disabled:opacity-50 text-sm"
-                        >
-                          {actionLoading === item.id ? '...' : '부족 시뮬레이션'}
-                        </button>
                       </div>
                     </td>
                   </tr>
