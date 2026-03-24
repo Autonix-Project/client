@@ -1,38 +1,35 @@
 import { useState, useEffect } from 'react';
 import { ClipboardList, TrendingUp, Clock, CheckCircle } from 'lucide-react';
-import { ordersAPI, ProductionOrder, CAR_MODELS, CAR_COLORS } from '../utils/api';
+import {
+  ordersService,
+  OrderResponse,
+  CAR_TYPES, COLOR_TYPES, DESTINATION_TYPES,
+  CAR_TYPE_LABELS, COLOR_LABELS, DESTINATION_LABELS,
+} from '../utils/ordersApi';
 import { toast } from 'sonner';
 
-function formatDateTime(date: Date): string {
-  const year  = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day   = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const mins  = String(date.getMinutes()).padStart(2, '0');
-  return `${year}-${month}-${day} ${hours}:${mins}`;
-}
 
-const STATUS_CONFIG = {
-  PENDING:       { label: '대기중', color: 'text-muted-foreground', bgColor: 'bg-secondary' },
-  IN_PRODUCTION: { label: '생산중', color: 'text-primary',          bgColor: 'bg-primary/10' },
-  COMPLETED:     { label: '완료',   color: 'text-[#39D353]',        bgColor: 'bg-[#39D353]/10' },
+const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
+  READY:       { label: '대기중', color: 'text-muted-foreground', bgColor: 'bg-secondary' },
+  IN_PROGRESS: { label: '생산중', color: 'text-primary',          bgColor: 'bg-primary/10' },
+  COMPLETED:   { label: '완료',   color: 'text-[#39D353]',        bgColor: 'bg-[#39D353]/10' },
 };
 
 export function OrdersPage() {
-  const [orders, setOrders] = useState<ProductionOrder[]>([]);
+  const [orders, setOrders] = useState<OrderResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  const [modelName, setModelName] = useState(CAR_MODELS[0]);
+  const [carType, setCarType] = useState<string>(CAR_TYPES[0]);
+  const [color, setColor] = useState<string>(COLOR_TYPES[0]);
+  const [destination, setDestination] = useState<string>(DESTINATION_TYPES[0]);
   const [quantity, setQuantity] = useState('1');
-  const [color, setColor] = useState(CAR_COLORS[0]);
-  const [destination, setDestination] = useState('');
 
   useEffect(() => { loadOrders(); }, []);
 
   const loadOrders = async () => {
     try {
-      const data = await ordersAPI.getAll();
+      const data = await ordersService.getAll();
       setOrders(data);
     } catch {
       toast.error('주문 데이터 로딩 실패');
@@ -41,28 +38,21 @@ export function OrdersPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
-
     const qty = parseInt(quantity);
     if (isNaN(qty) || qty < 1 || qty > 50) {
       toast.error('수량은 1~50 사이로 입력해주세요');
       return;
     }
-    if (!destination.trim()) {
-      toast.error('목적지를 입력해주세요');
-      return;
-    }
-
     setSubmitting(true);
     try {
-      await ordersAPI.create({ modelName, quantity: qty, color, destination: destination.trim() });
+      await ordersService.create({ carType, color, destination, totalQuantity: qty });
       toast.success('주문이 등록되었습니다.');
       await loadOrders();
       setQuantity('1');
-      setDestination('');
-    } catch {
-      toast.error('주문 등록 실패');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : '주문 등록 실패');
     } finally {
       setSubmitting(false);
     }
@@ -94,29 +84,33 @@ export function OrdersPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label htmlFor="model" className="block text-sm mb-2">차종 선택</label>
-            <select
-              id="model"
-              value={modelName}
-              onChange={e => setModelName(e.target.value)}
-              className="w-full px-4 py-3 bg-input-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              {CAR_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="carType" className="block text-sm mb-2">차종 선택</label>
+              <select
+                id="carType"
+                value={carType}
+                onChange={e => setCarType(e.target.value)}
+                className="w-full px-4 py-3 bg-input-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                {CAR_TYPES.map(t => (
+                  <option key={t} value={t}>{CAR_TYPE_LABELS[t]}</option>
+                ))}
+              </select>
+            </div>
 
-          <div>
-            <label htmlFor="quantity" className="block text-sm mb-2">생산 수량 (1~50)</label>
-            <input
-              id="quantity"
-              type="number"
-              min="1"
-              max="50"
-              value={quantity}
-              onChange={e => setQuantity(e.target.value)}
-              className="w-full px-4 py-3 bg-input-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            />
+            <div>
+              <label htmlFor="quantity" className="block text-sm mb-2">생산 수량 (1~50)</label>
+              <input
+                id="quantity"
+                type="number"
+                min="1"
+                max="50"
+                value={quantity}
+                onChange={e => setQuantity(e.target.value)}
+                className="w-full px-4 py-3 bg-input-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -128,19 +122,24 @@ export function OrdersPage() {
                 onChange={e => setColor(e.target.value)}
                 className="w-full px-4 py-3 bg-input-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
               >
-                {CAR_COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+                {COLOR_TYPES.map(c => (
+                  <option key={c} value={c}>{COLOR_LABELS[c]}</option>
+                ))}
               </select>
             </div>
+
             <div>
               <label htmlFor="destination" className="block text-sm mb-2">목적지</label>
-              <input
+              <select
                 id="destination"
-                type="text"
-                placeholder="예: 서울 딜러"
                 value={destination}
                 onChange={e => setDestination(e.target.value)}
                 className="w-full px-4 py-3 bg-input-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-              />
+              >
+                {DESTINATION_TYPES.map(d => (
+                  <option key={d} value={d}>{DESTINATION_LABELS[d]}</option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -168,36 +167,32 @@ export function OrdersPage() {
                 <th className="px-6 py-4 text-left">색상</th>
                 <th className="px-6 py-4 text-center">수량</th>
                 <th className="px-6 py-4 text-left">목적지</th>
-                <th className="px-6 py-4 text-left">등록시각</th>
                 <th className="px-6 py-4 text-center">상태</th>
               </tr>
             </thead>
             <tbody>
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
                     등록된 주문이 없습니다
                   </td>
                 </tr>
               ) : (
                 orders.map(order => {
-                  const statusConfig = STATUS_CONFIG[order.status];
+                  const statusConfig = STATUS_CONFIG[order.status] ?? STATUS_CONFIG['READY'];
                   return (
-                    <tr key={order.id} className="border-b border-border hover:bg-secondary/30 transition-colors">
-                      <td className="px-6 py-4 font-medium">{order.id}</td>
-                      <td className="px-6 py-4 font-medium">{order.modelName}</td>
-                      <td className="px-6 py-4 text-muted-foreground">{order.color ?? '-'}</td>
-                      <td className="px-6 py-4 text-center font-bold text-lg">{order.quantity}</td>
-                      <td className="px-6 py-4 text-muted-foreground">{order.destination ?? '-'}</td>
-                      <td className="px-6 py-4 text-sm text-muted-foreground">
-                        {formatDateTime(new Date(order.createdAt))}
-                      </td>
+                    <tr key={order.orderId} className="border-b border-border hover:bg-secondary/30 transition-colors">
+                      <td className="px-6 py-4 font-medium">{order.orderNumber}</td>
+                      <td className="px-6 py-4">{CAR_TYPE_LABELS[order.carModel] ?? order.carModel}</td>
+                      <td className="px-6 py-4 text-muted-foreground">{COLOR_LABELS[order.carColor] ?? order.carColor}</td>
+                      <td className="px-6 py-4 text-center font-bold text-lg">{order.totalQuantity}</td>
+                      <td className="px-6 py-4 text-muted-foreground">{DESTINATION_LABELS[order.destination] ?? order.destination}</td>
                       <td className="px-6 py-4">
                         <div className="flex justify-center">
                           <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${statusConfig.bgColor} ${statusConfig.color}`}>
-                            {order.status === 'PENDING'       && <Clock className="w-3 h-3" />}
-                            {order.status === 'IN_PRODUCTION' && <TrendingUp className="w-3 h-3" />}
-                            {order.status === 'COMPLETED'     && <CheckCircle className="w-3 h-3" />}
+                            {order.status === 'READY'       && <Clock className="w-3 h-3" />}
+                            {order.status === 'IN_PROGRESS' && <TrendingUp className="w-3 h-3" />}
+                            {order.status === 'COMPLETED'   && <CheckCircle className="w-3 h-3" />}
                             {statusConfig.label}
                           </span>
                         </div>
