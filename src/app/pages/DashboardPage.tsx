@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Package, TrendingUp, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
-import { dashboardService, DashboardSummaryResponse, DashboardStageVehicleResponse, StageBoardResponse } from '../utils/dashboardApi';
+import { dashboardService, DashboardSummaryResponse, DashboardStageVehicleResponse, StageBoardResponse, NotificationEvent } from '../utils/dashboardApi';
 import { toast } from 'sonner';
 
 function formatTimeAgo(dateStr: string | null): string {
@@ -28,25 +28,37 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 10000);
-    return () => clearInterval(interval);
-  }, []);
+    // summary는 30초 폴링
+    dashboardService.getSummary().then(setSummary).catch(() => toast.error('요약 데이터 로딩 실패'));
+    const summaryInterval = setInterval(() => {
+      dashboardService.getSummary().then(setSummary).catch(() => {});
+    }, 30000);
 
-  const loadData = async () => {
-    try {
-      const [summaryData, stageBoardData] = await Promise.all([
-        dashboardService.getSummary(),
-        dashboardService.getStageBoard(),
-      ]);
-      setSummary(summaryData);
-      setStageBoard(stageBoardData);
-    } catch (error) {
-      toast.error('대시보드 데이터 로딩 실패');
-    } finally {
+    // 스테이지보드는 SSE 실시간
+    const closeFlow = dashboardService.subscribeRealtimeFlow((data) => {
+      setStageBoard(data);
       setLoading(false);
-    }
-  };
+    });
+
+    // 알림은 SSE → toast
+    const closeNotifications = dashboardService.subscribeNotifications((event: NotificationEvent) => {
+      const msg = `[${event.title}] ${event.message}`;
+      if (event.severity === 'CRITICAL') toast.error(msg);
+      else toast.warning(msg);
+    });
+
+    // SSE 연결 전 초기 로딩
+    dashboardService.getStageBoard().then((data) => {
+      setStageBoard(data);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+
+    return () => {
+      clearInterval(summaryInterval);
+      closeFlow();
+      closeNotifications();
+    };
+  }, []);
 
   if (loading) {
     return (
